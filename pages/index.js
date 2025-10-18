@@ -1,87 +1,62 @@
-import React, { useMemo } from "react";
+import * as React from "react";
 import Head from "next/head";
-import { withTheme } from "@material-ui/core/styles";
-import Chain from "../components/chain";
-import { fetcher, populateChain } from "../utils";
-import { useSearch, useTestnets } from "../stores";
+import { useRouter } from "next/router";
 import Layout from "../components/Layout";
-import classes from "../components/Layout/index.module.css";
+import Chain from "../components/chain";
+import { AdBanner } from "../components/AdBanner";
+import { generateChainData } from "../utils/fetch";
+import { useFilteredChains } from '../hooks/useFilteredChains';
 
-export async function getStaticProps({ locale }) {
-  const chains = await fetcher("https://chainid.network/chains.json");
-  const chainTvls = await fetcher("https://api.llama.fi/chains");
-
-  const sortedChains = chains
-    .filter((c) => c.name !== "420coin") // same chainId as ronin
-    .map((chain) => populateChain(chain, chainTvls))
-    .sort((a, b) => {
-      return (b.tvl ?? 0) - (a.tvl ?? 0);
-    });
+export async function getStaticProps() {
+  const sortedChains = await generateChainData();
 
   return {
     props: {
-      sortedChains,
-      messages: (await import(`../translations/${locale}.json`)).default,
-    },
-    revalidate: 3600,
+      chains: sortedChains,
+      // messages: (await import(`../translations/${locale}.json`)).default,
+    }
   };
 }
 
-function Home({ changeTheme, theme, sortedChains }) {
-  const testnets = useTestnets((state) => state.testnets);
-  const search = useSearch((state) => state.search);
+function Home({ chains }) {
+  const { chainName, setChainName, finalChains } = useFilteredChains(chains);
 
-  const chains = useMemo(() => {
-    if (!testnets) {
-      return sortedChains.filter((item) => {
-        const testnet =
-          item.name?.toLowerCase().includes("test") ||
-          item.title?.toLowerCase().includes("test") ||
-          item.network?.toLowerCase().includes("test");
-        const devnet =
-            item.name?.toLowerCase().includes("devnet") ||
-            item.title?.toLowerCase().includes("devnet") ||
-            item.network?.toLowerCase().includes("devnet");
-        return !testnet && !devnet;
-      });
-    } else return sortedChains;
-  }, [testnets, sortedChains]);
+  const [end, setEnd] = React.useState(15);
 
   return (
     <>
       <Head>
-        <title>Chainlist</title>
+        <title>ChainList</title>
         <meta
           name="description"
-          content="Chainlist is a list of RPCs for EVM(Ethereum Virtual Machine) networks. Use the information to connect your wallets and Web3 middleware providers to the appropriate Chain ID and Network ID. Find the best RPC for both Mainnet and Testnet to connect to the correct chain"
+          content="ChainList is a list of RPCs for EVM(Ethereum Virtual Machine) networks. Use the information to connect your wallets and Web3 middleware providers to the appropriate Chain ID and Network ID. Find the best RPC for both Mainnet and Testnet to connect to the correct chain"
         />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <Layout changeTheme={changeTheme} theme={theme}>
-        <div className={classes.cardsContainer}>
-          {(search === ""
-            ? chains
-            : chains.filter((chain) => {
-                //filter
-                return (
-                  chain.chain.toLowerCase().includes(search.toLowerCase()) ||
-                  chain.chainId
-                    .toString()
-                    .toLowerCase()
-                    .includes(search.toLowerCase()) ||
-                  chain.name.toLowerCase().includes(search.toLowerCase()) ||
-                  (chain.nativeCurrency ? chain.nativeCurrency.symbol : "")
-                    .toLowerCase()
-                    .includes(search.toLowerCase())
-                );
-              })
-          ).map((chain, idx) => {
-            return <Chain chain={chain} key={idx} />;
-          })}
-        </div>
+
+      <Layout chainName={chainName} setChainName={setChainName}>
+        <React.Suspense fallback={<div className="h-screen"></div>}>
+          <div className="dark:text-[#B3B3B3] text-black grid gap-5 grid-cols-1 place-content-between pb-4 sm:pb-10 sm:grid-cols-[repeat(auto-fit,_calc(50%_-_15px))] 3xl:grid-cols-[repeat(auto-fit,_calc(33%_-_20px))] isolate grid-flow-dense">
+            {finalChains.slice(0, 2).map((chain) => {
+              return <Chain chain={chain} key={JSON.stringify(chain) + "en"} lang="en" />;
+            })}
+            <AdBanner />
+            {finalChains.slice(2, end).map((chain) => {
+              return <Chain chain={chain} key={JSON.stringify(chain) + "en"} lang="en" />;
+            })}
+          </div>
+        </React.Suspense>
+        {end - 1 < finalChains.length ? (
+          <button
+            onClick={() => setEnd(finalChains.length)}
+            className="w-full border dark:border-[#171717] border-[#EAEAEA] px-4 py-2 rounded-[50px] mb-auto text-white bg-[#2F80ED] mx-auto"
+          >
+            Show all
+          </button>
+        ) : null}
       </Layout>
     </>
   );
 }
 
-export default withTheme(Home);
+export default Home;

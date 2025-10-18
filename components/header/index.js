@@ -1,308 +1,140 @@
-import React, { useState, useEffect } from "react";
+import * as React from "react";
 import { useRouter } from "next/router";
+// import { useTranslations } from "next-intl";
+import { notTranslation as useTranslations } from "../../utils";
+import { formatAddress, getProvider } from "../../utils";
+import { walletIcons } from "../../constants/walletIcons";
+import useConnect from "../../hooks/useConnect";
+import useAccount from "../../hooks/useAccount";
 
-import {
-  Typography,
-  Switch,
-  Button,
-  Paper,
-  TextField,
-  InputAdornment,
-} from "@material-ui/core";
-import {
-  withStyles,
-  withTheme,
-  createTheme,
-  ThemeProvider,
-} from "@material-ui/core/styles";
-
-import WbSunnyOutlinedIcon from "@material-ui/icons/WbSunnyOutlined";
-import Brightness2Icon from "@material-ui/icons/Brightness2";
-import SearchIcon from "@material-ui/icons/Search";
-
-import {
-  CONNECT_WALLET,
-  TRY_CONNECT_WALLET,
-  ACCOUNT_CONFIGURED,
-} from "../../stores/constants/constants";
-
-import stores, { useSearch, useTestnets } from "../../stores";
-import { formatAddress, getProvider, useDebounce } from "../../utils";
-
-import classes from "./header.module.css";
-import { useTranslations } from "next-intl";
-
-const StyledSwitch = withStyles((theme) => ({
-  root: {
-    width: 58,
-    height: 32,
-    padding: 0,
-    margin: theme.spacing(1),
-  },
-  switchBase: {
-    padding: 1,
-    "&$checked": {
-      transform: "translateX(28px)",
-      color: "#212529",
-      "& + $track": {
-        backgroundColor: "#ffffff",
-        opacity: 1,
-      },
-    },
-    "&$focusVisible $thumb": {
-      color: "#ffffff",
-      border: "6px solid #fff",
-    },
-  },
-  thumb: {
-    width: 24,
-    height: 24,
-  },
-  track: {
-    borderRadius: 32 / 2,
-    border: `1px solid #212529`,
-    backgroundColor: "#212529",
-    opacity: 1,
-    transition: theme.transitions.create(["background-color", "border"]),
-  },
-  checked: {},
-  focusVisible: {},
-}))(({ classes, ...props }) => {
-  return (
-    <Switch
-      focusVisibleClassName={classes.focusVisible}
-      disableRipple
-      classes={{
-        root: classes.root,
-        switchBase: classes.switchBase,
-        thumb: classes.thumb,
-        track: classes.track,
-        checked: classes.checked,
-      }}
-      {...props}
-    />
-  );
-});
-
-const searchTheme = createTheme({
-  palette: {
-    type: "light",
-    primary: {
-      main: "#2F80ED",
-    },
-  },
-  shape: {
-    borderRadius: "10px",
-  },
-  typography: {
-    fontFamily: [
-      "Inter",
-      "Arial",
-      "-apple-system",
-      "BlinkMacSystemFont",
-      '"Segoe UI"',
-      "Roboto",
-      '"Helvetica Neue"',
-      "sans-serif",
-      '"Apple Color Emoji"',
-      '"Segoe UI Emoji"',
-      '"Segoe UI Symbol"',
-    ].join(","),
-    body1: {
-      fontSize: "12px",
-    },
-  },
-  overrides: {
-    MuiPaper: {
-      elevation1: {
-        "box-shadow": "0px 7px 7px #0000000A;",
-        "-webkit-box-shadow": "0px 7px 7px #0000000A;",
-        "-moz-box-shadow": "0px 7px 7px #0000000A;",
-      },
-    },
-    MuiInputBase: {
-      input: {
-        fontSize: "14px",
-      },
-    },
-    MuiOutlinedInput: {
-      input: {
-        padding: "12.5px 14px",
-      },
-      notchedOutline: {
-        borderColor: "#FFF",
-      },
-    },
-  },
-});
-
-const TestnetSwitch = withStyles({
-  switchBase: {
-    "&$checked": {
-      color: "#2f80ed",
-    },
-  },
-  checked: {},
-  track: {},
-})(Switch);
-
-function Header(props) {
-  const t = useTranslations("Common");
-  const [account, setAccount] = useState(null);
-  const [darkMode, setDarkMode] = useState(
-    props.theme.palette.type === "dark" ? true : false
-  );
-
-  useEffect(() => {
-    const accountConfigure = () => {
-      const accountStore = stores.accountStore.getStore("account");
-      setAccount(accountStore);
-    };
-    const connectWallet = () => {
-      onAddressClicked();
-      stores.dispatcher.dispatch({ type: TRY_CONNECT_WALLET });
-    };
-
-    stores.emitter.on(ACCOUNT_CONFIGURED, accountConfigure);
-    stores.emitter.on(CONNECT_WALLET, connectWallet);
-
-    const accountStore = stores.accountStore.getStore("account");
-    setAccount(accountStore);
-
-    return () => {
-      stores.emitter.removeListener(ACCOUNT_CONFIGURED, accountConfigure);
-      stores.emitter.removeListener(CONNECT_WALLET, connectWallet);
-    };
-  }, []);
-
-  const handleToggleChange = (event, val) => {
-    setDarkMode(val);
-    props.changeTheme(val);
-  };
-
-  const onAddressClicked = () => {
-    stores.dispatcher.dispatch({ type: TRY_CONNECT_WALLET });
-  };
-
-  const renderProviderLogo = () => {
-    const providerLogoList = {
-      "Coinbase Wallet": "coinbase",
-      "Brave Wallet": "bravewallet",
-      Metamask: "metamask",
-      imToken: "imtoken",
-      Wallet: "metamask",
-    };
-    return providerLogoList[getProvider()];
-  };
-
-  useEffect(function () {
-    const localStorageDarkMode = window.localStorage.getItem(
-      "yearn.finance-dark-mode"
-    );
-    setDarkMode(localStorageDarkMode ? localStorageDarkMode === "dark" : false);
-  }, []);
-
-  const testnets = useTestnets((state) => state.testnets);
-  const handleSearch = useSearch((state) => state.handleSearch);
-  const toggleTestnets = useTestnets((state) => state.toggleTestnets);
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const debouncedSearchTerm = useDebounce(searchTerm, 500);
-
-  useEffect(() => {
-    if (debouncedSearchTerm) {
-      handleSearch(debouncedSearchTerm);
-    } else {
-      handleSearch("");
-    }
-  }, [debouncedSearchTerm]);
+function Header({ lang, chainName, setChainName }) {
+  const t = useTranslations("Common", lang);
 
   const router = useRouter();
 
-  useEffect(() => {
-    if (!router.isReady) return;
-    if (router.query.search) {
-      setSearchTerm(router.query.search);
-      delete router.query.search;
-    }
-  }, [router.isReady]);
+  const { testnets, testnet, search } = router.query;
+
+  const includeTestnets =
+    (typeof testnets === "string" && testnets === "true") || (typeof testnet === "string" && testnet === "true");
+
+  const toggleTestnets = () =>
+    router.push(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, testnets: !includeTestnets },
+      },
+      undefined,
+      { shallow: true },
+    );
+
+  const timeout = React.useRef(null);
+
+  const { mutate: connectWallet } = useConnect();
+
+  const { data: accountData } = useAccount();
+
+  const address = accountData?.address ?? null;
 
   return (
-    <div
-      className={
-        props.theme.palette.type === "dark"
-          ? classes.headerContainerDark
-          : classes.headerContainer
-      }
-    >
-      <div className={classes.filterRow}>
-        <ThemeProvider theme={searchTheme}>
-          <Paper className={classes.searchPaper}>
-            <TextField
-              fullWidth
-              className={classes.searchContainer}
-              variant="outlined"
-              placeholder="ETH, Fantom, ..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Typography className={classes.searchInputAdnornment}>
-                      {t("search-networks")}
-                    </Typography>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Paper>
-        </ThemeProvider>
-      </div>
+    <div className="sticky top-0 z-50 rounded-[10px] dark:bg-[#181818] bg-[#f3f3f3] p-5 -m-5">
+      <header className="flex items-end gap-2 w-full sticky top-4 shadow rounded-[10px] z-50">
+        <div className="flex flex-col dark:bg-[#0D0D0D] bg-white rounded-[10px] flex-1">
+          <div className="rounded-t-[10px] shadow-sm">
+            <label className="flex sm:items-center flex-col sm:flex-row focus-within:ring-2 dark:ring-[#2F80ED] ring-[#2F80ED] rounded-t-[10px]">
+              <span className="font-bold text-sm dark:text-[#B3B3B3] text-black whitespace-nowrap px-3 pt-4 sm:pt-0">
+                {t("search-networks")}
+              </span>
+              {setChainName ? (
+                <input
+                  placeholder="ETH, Sonic, ..."
+                  autoFocus
+                  value={chainName}
+                  onChange={(e) => {
+                    setChainName(e.target.value);
+                  }}
+                  onKeyUp={(event) => {
+                    clearTimeout(timeout.current);
+                    timeout.current = setTimeout(() => {
+                      router
+                        .push(
+                          {
+                            pathname: router.pathname.includes("/chain/") ? "/" : router.pathname,
+                            query: { ...router.query, search: event.target.value },
+                          },
+                          undefined,
+                          { shallow: true },
+                        )
+                        .then(() => {
+                          clearTimeout(timeout.current);
+                        });
+                    }, 1000);
+                  }}
+                  className="dark:bg-[#0D0D0D] bg-white dark:text-[#B3B3B3] text-black flex-1 px-3 sm:px-2 pb-4 pt-2 sm:py-4 outline-none"
+                />
+              ) : (
+                <input
+                  placeholder="ETH, Sonic, ..."
+                  autoFocus
+                  defaultValue={search ?? ""}
+                  onKeyUp={(event) => {
+                    clearTimeout(timeout.current);
+                    timeout.current = setTimeout(() => {
+                      router
+                        .push(
+                          {
+                            pathname: router.pathname.includes("/chain/") ? "/" : router.pathname,
+                            query: { ...router.query, search: event.target.value },
+                          },
+                          undefined,
+                          { shallow: true },
+                        )
+                        .then(() => {
+                          clearTimeout(timeout.current);
+                        });
+                    }, 100);
+                  }}
+                  className="dark:bg-[#0D0D0D] bg-white dark:text-[#B3B3B3] text-black flex-1 px-3 sm:px-2 pb-4 pt-2 sm:py-4 outline-none"
+                />
+              )}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                className="dark:stroke-[#B3B3B3] stroke-black w-4 h-4 mr-3 hidden sm:block"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                />
+              </svg>
+            </label>
+          </div>
+          <div className="dark:text-[#B3B3B3] text-black py-2 px-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="testnets" checked={includeTestnets} onChange={toggleTestnets} />
+              <span>Include Testnets</span>
+            </label>
 
-      <div className={classes.switchContainer}>
-        <label className={classes.label}>
-          <TestnetSwitch checked={testnets} onChange={toggleTestnets} />
-          <span>Testnets</span>
-        </label>
-        <div className={classes.themeSelectContainer}>
-          <StyledSwitch
-            icon={<Brightness2Icon className={classes.switchIcon} />}
-            checkedIcon={<WbSunnyOutlinedIcon className={classes.switchIcon} />}
-            checked={darkMode}
-            onChange={handleToggleChange}
-          />
+            <button
+              className="flex gap-2 items-center dark:bg-[#212121] bg-[#DEDEDE] justify-center rounded-[10px] py-[8px] px-8 font-medium dark:text-[#B3B3B3] text-black"
+              onClick={connectWallet}
+            >
+              {address ? (
+                <>
+                  <img src={walletIcons[getProvider()]} width={20} height={20} alt="" />
+                  <span>{formatAddress(address)}</span>
+                </>
+              ) : (
+                t("connect-wallet")
+              )}
+            </button>
+          </div>
         </div>
-      </div>
-
-      <Button
-        disableElevation
-        className={classes.accountButton}
-        variant="contained"
-        color="secondary"
-        onClick={onAddressClicked}
-      >
-        {account && account.address && (
-          <div
-            className={`${classes.accountIcon} ${
-              classes[renderProviderLogo()]
-            }`}
-          ></div>
-        )}
-        <Typography variant="h5">
-          <Typography className={classes.searchInputAdnornment}>
-            {account && account.address
-              ? formatAddress(account.address)
-              : t("connect-wallet")}
-          </Typography>
-        </Typography>
-      </Button>
+      </header>
     </div>
   );
 }
 
-export default withTheme(Header);
+export default Header;

@@ -1,116 +1,175 @@
-import React, { useMemo } from "react";
+import * as React from "react";
 import Head from "next/head";
-import { Typography, Paper, Tooltip } from "@material-ui/core";
-import { withTheme } from "@material-ui/core/styles";
-import { populateChain, fetcher } from "../../utils";
+import Link from "next/link";
+// import { useTranslations } from "next-intl";
+import { notTranslation as useTranslations } from "../../utils";
+import { populateChain, fetchWithCache } from "../../utils/fetch";
 import AddNetwork from "../../components/chain";
 import Layout from "../../components/Layout";
 import RPCList from "../../components/RPCList";
-import classes from "./index.module.css";
-import Image from "next/image";
+import chainIds from "../../constants/chainIds.js";
+import { overwrittenChains } from "../../constants/additionalChainRegistry/list";
+import { useQuery } from "@tanstack/react-query";
 
-export async function getStaticProps({ params, locale }) {
-  const chains = await fetcher("https://chainid.network/chains.json");
+export async function getStaticProps({ params }) {
+  const [chains, chainTvls] = await Promise.all([
+    fetchWithCache("https://chainid.network/chains.json"),
+    fetchWithCache("https://api.llama.fi/chains"),
+  ]);
 
-  const chainTvls = await fetcher("https://api.llama.fi/chains");
+  const chain =
+    overwrittenChains.find(
+      (c) =>
+        c.chainId?.toString() === params.chain ||
+        c.chainId?.toString() === Object.entries(chainIds).find(([, name]) => params.chain === name)?.[0] ||
+        c.name.toLowerCase() === params.chain.toLowerCase().split("%20").join(" "),
+    ) ??
+    chains.find(
+      (c) =>
+        c.chainId?.toString() === params.chain ||
+        c.chainId?.toString() === Object.entries(chainIds).find(([, name]) => params.chain === name)?.[0] ||
+        c.name.toLowerCase() === params.chain.toLowerCase().split("%20").join(" "),
+    );
 
-  const chain = chains.find((c) => c.chainId?.toString() === params.chain);
+  if (!chain) {
+    return {
+      notFound: true,
+    };
+  }
 
   return {
     props: {
       chain: chain ? populateChain(chain, chainTvls) : null,
-      messages: (await import(`../../translations/${locale}.json`)).default,
-    },
-    revalidate: 3600,
+      // messages: (await import(`../../translations/${locale}.json`)).default,
+    }
   };
 }
 
 export async function getStaticPaths() {
-  const res = await fetcher("https://chainid.network/chains.json");
+  const chains = await fetchWithCache("https://chainid.network/chains.json");
 
-  const paths = res.map((chain) => ({
-    params: { chain: chain?.chainId?.toString() ?? null },
-  }));
+  const paths = chains
+    .map((chain) => [
+      {
+        params: {
+          chain: chain.chainId.toString(),
+        },
+      },
+      {
+        params: {
+          chain: chain.name.toLowerCase(),
+        },
+      },
+    ]).concat(overwrittenChains.map((chain) => [
+      {
+        params: {
+          chain: chain.chainId.toString(),
+        },
+      },
+      {
+        params: {
+          chain: chain.name.toLowerCase(),
+        },
+      },
+    ]))
+    .flat();
 
-  return { paths, fallback: "blocking" };
+  return { paths, fallback: false };
 }
 
-function Chain({ changeTheme, theme, chain }) {
-  const icon = useMemo(() => {
-    return chain.chainSlug
-      ? `https://defillama.com/chain-icons/rsz_${chain.chainSlug}.jpg`
-      : "/unknown-logo.png";
+function Chain({ chain }) {
+  const t = useTranslations("Common", "en");
+
+  const icon = React.useMemo(() => {
+    return chain?.chainSlug ? `https://icons.llamao.fi/icons/chains/rsz_${chain.chainSlug}.jpg` : "/unknown-logo.png";
   }, [chain]);
+
+  const { data: blockGasLimit } = useQuery({
+    queryKey: ["blockGasLimit", chain?.rpc?.[0]],
+    queryFn: () => fetchBlockGasLimit(chain?.rpc?.[0]?.url),
+  });
 
   return (
     <>
       <Head>
-        <title>{`${chain.name} | Chainlist`}</title>
+        <title>{`${chain.name} RPC and Chain settings | ChainList`}</title>
         <meta
           name="description"
-          content={`Chainlist is a list of RPCs for EVM(Ethereum Virtual Machine) networks. Use the information to connect your wallets and Web3 middleware providers to ${chain.name}. Find the best RPC to connect to ${chain.name}`}
+          content={`Find the best ${chain.name} RPC to connect to your wallets and Web3 middleware providers.`}
         />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <Layout theme={theme} changeTheme={changeTheme}>
-        <Paper elevation={1} className={classes.chainDetails}>
-          <div className={classes.chainNameContainer}>
-            <Image
+
+      <Layout lang="en">
+        <div className="shadow dark:bg-[#0D0D0D] bg-white p-8 rounded-[10px] flex flex-col gap-3 overflow-hidden">
+          <div className="flex items-center justify-center gap-2">
+            <img
               src={icon}
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = "/chains/unknown-logo.png";
-              }}
-              width={28}
-              height={28}
-              className={classes.avatar}
+              width={26}
+              height={26}
+              className="rounded-full flex-shrink-0 flex relative"
+              alt={chain.name + " logo"}
             />
-
-            <Tooltip title={chain.name}>
-              <Typography
-                variant="h3"
-                className={classes.name}
-                noWrap
-                style={{ marginLeft: "24px" }}
-              >
-                <a href={chain.infoURL} target="_blank" rel="noreferrer">
-                  {chain.name}
-                </a>
-              </Typography>
-            </Tooltip>
+            <h1 className="text-xl font-semibold overflow-hidden text-ellipsis relative top-[1px] dark:text-[#B3B3B3]">
+              {chain.name}
+            </h1>
           </div>
 
-          <div className={classes.chainInfoContainer}>
-            <div className={classes.dataPoint}>
-              <Typography
-                variant="subtitle1"
-                color="textSecondary"
-                className={classes.dataPointHeader}
-              >
-                ChainID
-              </Typography>
-              <Typography variant="h5">{chain.chainId}</Typography>
-            </div>
-            <div className={classes.dataPoint}>
-              <Typography
-                variant="subtitle1"
-                color="textSecondary"
-                className={classes.dataPointHeader}
-              >
-                Currency
-              </Typography>
-              <Typography variant="h5">
-                {chain.nativeCurrency ? chain.nativeCurrency.symbol : "none"}
-              </Typography>
-            </div>
-          </div>
+          <table>
+            <thead>
+              <tr>
+                <th className="font-normal text-gray-500 dark:text-[#B3B3B3]">ChainID</th>
+                <th className="font-normal text-gray-500 dark:text-[#B3B3B3]">{t("currency")}</th>
+                <th className="font-normal text-gray-500 dark:text-[#B3B3B3]">Block Gas Limit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="text-center font-bold px-4 dark:text-[#B3B3B3]">{`${chain.chainId}(0x${Number(
+                  chain.chainId,
+                ).toString(16)})`}</td>
+                <td className="text-center font-bold px-4 dark:text-[#B3B3B3]">
+                  {chain.nativeCurrency ? chain.nativeCurrency.symbol : "none"}
+                </td>
+                <td className="text-center font-bold px-4 dark:text-[#B3B3B3]">{blockGasLimit ?? "Unknown"}</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <AddNetwork chain={chain} buttonOnly />
-        </Paper>
-        <RPCList chain={chain} />
+          <AddNetwork chain={chain} buttonOnly lang="en" />
+        </div>
+
+        <div className="max-w-[calc(60vw-56px)]">
+          <RPCList chain={chain} lang="en" />
+        </div>
       </Layout>
     </>
   );
 }
 
-export default withTheme(Chain);
+async function fetchBlockGasLimit(rpc) {
+  if (!rpc) return null;
+  try {
+    const response = await fetch(rpc, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getBlockByNumber",
+        params: ["latest", false],
+        id: 1,
+      }),
+    });
+    const data = await response.json();
+    if (data.result && data.result.gasLimit) {
+      return parseInt(data.result.gasLimit, 16);
+    }
+    return "Unknown";
+  } catch (error) {
+    console.error("Error fetching block gas limit:", error);
+  }
+}
+
+export default Chain;
